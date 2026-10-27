@@ -3,7 +3,12 @@ name = "kosh"
 version = "0.1.0"
 description = "Add your description here"
 authors = [
-    { name = "Koushik Saraswathula", email = "Koushik.Saraswathula@gamil.com" }
+    { name = "Koushik Saraswathula", email = "Koushik.Saraswathula@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "openai>=3.39.0",
+    "pgvector>=0.5.1",
+    "psycopg[binary]>=3.3.6",
+    "pydantic-settings>=2.16.1",
+]
