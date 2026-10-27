@@ -1,0 +1,9 @@
+[project]
+name = "kosh"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "Koushik Saraswathula", email = "Koushik.Saraswathula@gamil.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
