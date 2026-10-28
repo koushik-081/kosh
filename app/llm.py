@@ -1,5 +1,5 @@
 from functools import lru_cache
-
+from collections.abc import Iterator
 from openai import OpenAI
 
 from app.config import get_settings
@@ -40,3 +40,15 @@ def embed(texts: list[str]) -> list[list[float]]:
             f"{s.embed_model} returned {len(vectors[0])} dims, EMBED_DIM is {s.embed_dim}"
         )
     return vectors
+
+
+def chat_stream(messages: list[dict], fast: bool = False, temperature: float = 0.0) -> Iterator[str]:
+    """Like chat(), but yields the reply piece by piece as the model writes it."""
+    s = get_settings()
+    model = s.fast_model if fast else s.gen_model
+    stream = _llm_client().chat.completions.create(
+        model=model, messages=messages, temperature=temperature, stream=True
+    )
+    for event in stream:
+        if event.choices and event.choices[0].delta.content:
+            yield event.choices[0].delta.content
