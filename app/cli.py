@@ -2,6 +2,7 @@ import argparse
 
 from app.ingest.pdf import load_pdf
 from app.ingest.web import load_web
+from app.retrieval.rerank import retrieve
 from app.retrieval.search import search
 from app.store import save_chunks
 
@@ -18,6 +19,7 @@ def main() -> None:
     find.add_argument("query")
     find.add_argument("-c", "--collection", help="search only this collection (default: all)")
     find.add_argument("-k", type=int, default=5, help="how many results")
+    find.add_argument("--no-rerank", action="store_true", help="hybrid search only, skip the reranker")
 
     args = parser.parse_args()
     if args.command == "ingest":
@@ -27,7 +29,8 @@ def main() -> None:
             chunks = load_pdf(args.source, args.collection)
         print(f"{len(chunks)} chunks found, {save_chunks(chunks)} new ones saved")
     else:
-        for i, r in enumerate(search(args.query, args.collection, args.k), start=1):
+        find_chunks = search if args.no_rerank else retrieve
+        for i, r in enumerate(find_chunks(args.query, args.collection, args.k), start=1):
             print(f"\n[{i}] score {r.score}  {r.locator.section or ''}")
             print(f"    {r.locator.deep_link()}")
             print("    " + r.text[:300].replace("\n", " "))
