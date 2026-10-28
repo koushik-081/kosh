@@ -1,8 +1,10 @@
 import json
 from collections.abc import Iterator
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.generation.answer import Answer, build_messages, check_citations
@@ -11,7 +13,9 @@ from app.retrieval.rerank import retrieve
 from app.retrieval.search import SearchResult
 from app.store import connect
 
+DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 app = FastAPI(title="Kosh", description="Self-correcting knowledge engine")
+app.mount("/files", StaticFiles(directory=DATA_DIR), name="files")  # lets PDF citations open in the browser
 
 
 class QueryRequest(BaseModel):
@@ -37,6 +41,16 @@ def health() -> dict:
 def search_endpoint(req: QueryRequest) -> list[SearchResult]:
     return retrieve(req.question, req.collection, req.k)
 
+@app.get("/collections")
+def collections() -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT collection, count(DISTINCT document_id), count(*)
+            FROM chunks GROUP BY collection ORDER BY collection
+            """
+        ).fetchall()
+    return [{"name": name, "documents": docs, "chunks": chunks} for name, docs, chunks in rows]
 
 @app.post("/query", response_model=None)
 def query(req: QueryRequest) -> QueryResponse | StreamingResponse:
