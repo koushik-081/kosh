@@ -43,6 +43,7 @@ def main() -> None:
         if result.invalid_citations:
             print(f"  warning: the answer cited sources that don't exist: {result.invalid_citations}")
     else:
+        find_chunks = search if args.no_rerank else retrieve
         for i, r in enumerate(find_chunks(args.query, args.collection, args.k), start=1):
             print(f"\n[{i}] score {r.score}  {r.locator.section or ''}")
             print(f"    {r.locator.deep_link()}")
