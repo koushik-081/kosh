@@ -4,6 +4,7 @@ from app.ingest.github import load_github
 from app.generation.answer import answer
 from app.ingest.pdf import load_pdf
 from app.ingest.web import load_web
+from app.ingest.youtube import load_youtube
 from app.retrieval.rerank import retrieve
 from app.retrieval.search import search
 from app.store import save_chunks
@@ -14,7 +15,7 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
 
     ingest = commands.add_parser("ingest", help="add a PDF file or a web page to a collection")
-    ingest.add_argument("source", help="path to a .pdf file, a GitHub repo URL, or a web page URL")
+    ingest.add_argument("source", help="a .pdf file, a GitHub repo URL, a YouTube video URL, or a web page URL")
     ingest.add_argument("-c", "--collection", required=True)
     ingest.add_argument("--path", default="", help="GitHub only: ingest just this folder of the repo")
 
@@ -31,13 +32,17 @@ def main() -> None:
 
     args = parser.parse_args()
     if args.command == "ingest":
-        if args.source.startswith("https://github.com/"):
+        if "youtube.com/" in args.source or "youtu.be/" in args.source:
+            chunks = load_youtube(args.source, args.collection)
+        elif args.source.startswith("https://github.com/"):
             chunks = load_github(args.source, args.collection, args.path)
         elif args.source.startswith(("http://", "https://")):
             chunks = load_web(args.source, args.collection)
         else:
             chunks = load_pdf(args.source, args.collection)
-        print(f"{len(chunks)} chunks found, {save_chunks(chunks)} new ones saved")
+        print(f"{len(chunks)} chunks found, embedding...")
+        added = save_chunks(chunks, on_progress=lambda done, total: print(f"  {done}/{total}", end="\r", flush=True))
+        print(f"\n{added} new ones saved")
     elif args.command == "ask":
         result = answer(args.question, retrieve(args.question, args.collection, args.k))
         print(result.text)

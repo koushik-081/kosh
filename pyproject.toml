@@ -18,4 +18,5 @@ dependencies = [
     "streamlit>=1.66.1",
     "trafilatura>=2.3.1",
     "uvicorn>=0.54.0",
+    "youtube-transcript-api>=1.2.4",
 ]

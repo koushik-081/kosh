@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import psycopg
 from pgvector import Vector
 from pgvector.psycopg import register_vector
@@ -13,11 +15,18 @@ def connect() -> psycopg.Connection:
     return conn
 
 
-def save_chunks(chunks: list[Chunk], batch_size: int = 32) -> int:
-    """Embed and store chunks, skipping ones already in the collection. Returns how many were added."""
+def save_chunks(
+    chunks: list[Chunk], batch_size: int = 32, on_progress: Callable[[int, int], None] | None = None
+) -> int:
+    """Embed and store chunks, skipping ones already in the collection. Returns how many were added.
+
+    on_progress(done, total) is called before each batch, so callers can show progress.
+    """
     added = 0
     with connect() as conn:
         for i in range(0, len(chunks), batch_size):
+            if on_progress:
+                on_progress(i, len(chunks))
             batch = chunks[i : i + batch_size]
             new = _skip_existing(conn, batch)
             if not new:
