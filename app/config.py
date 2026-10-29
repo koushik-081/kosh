@@ -16,8 +16,15 @@ class Settings(BaseSettings):
     embed_base_url: str = "http://localhost:11434/v1"
     embed_model: str = "bge-m3"
     embed_dim: int = 1024
+
     # Reranker (runs locally on CPU, downloaded on first use)
     rerank_model: str = "Xenova/ms-marco-MiniLM-L-12-v2"
+
+    # Agent: reranker scores above relevant_score are kept without asking the LLM,
+    # below irrelevant_score are dropped without asking; only the middle is LLM-graded
+    relevant_score: float = 0.0
+    irrelevant_score: float = -8.0
+    max_retries: int = 2
 
     # Database
     database_url: str = "postgresql://kosh:kosh@localhost:5433/kosh"
