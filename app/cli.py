@@ -1,5 +1,6 @@
 import argparse
 
+from app.ingest.github import load_github
 from app.generation.answer import answer
 from app.ingest.pdf import load_pdf
 from app.ingest.web import load_web
@@ -13,8 +14,9 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
 
     ingest = commands.add_parser("ingest", help="add a PDF file or a web page to a collection")
-    ingest.add_argument("source", help="path to a .pdf file, or an http(s) URL")
+    ingest.add_argument("source", help="path to a .pdf file, a GitHub repo URL, or a web page URL")
     ingest.add_argument("-c", "--collection", required=True)
+    ingest.add_argument("--path", default="", help="GitHub only: ingest just this folder of the repo")
 
     find = commands.add_parser("search", help="find the chunks that best match a question")
     find.add_argument("query")
@@ -29,7 +31,9 @@ def main() -> None:
 
     args = parser.parse_args()
     if args.command == "ingest":
-        if args.source.startswith(("http://", "https://")):
+        if args.source.startswith("https://github.com/"):
+            chunks = load_github(args.source, args.collection, args.path)
+        elif args.source.startswith(("http://", "https://")):
             chunks = load_web(args.source, args.collection)
         else:
             chunks = load_pdf(args.source, args.collection)
