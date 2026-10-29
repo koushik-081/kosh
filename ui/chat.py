@@ -22,6 +22,14 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 
+def show_steps(steps: list[str]) -> None:
+    """The agent's reasoning, folded away under the answer."""
+    if steps:
+        with st.expander(f"🧠 How Kosh found this ({len(steps)} steps)"):
+            for step in steps:
+                st.markdown(step)
+
+
 def show_sources(citations: list[dict], sources: list[dict]) -> None:
     """Cited sources as links, plus everything retrieved (with rerank scores) in a fold-out."""
     for c in citations:
@@ -38,6 +46,7 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if msg["role"] == "assistant":
+            show_steps(msg.get("steps", []))  # .get: messages from before Day 5 have no steps
             show_sources(msg["citations"], msg["sources"])
 
 if question := st.chat_input("Ask a question about your sources..."):
@@ -46,16 +55,22 @@ if question := st.chat_input("Ask a question about your sources..."):
         st.markdown(question)
 
     with st.chat_message("assistant"):
-        waiting = st.empty()
-        waiting.caption("Searching and reading your sources... (the first words take ~40 s on CPU)")
-        result = {"sources": [], "citations": []}
+        thinking = st.status("Kosh is searching and checking sources...", expanded=True)
+        result = {"steps": [], "sources": [], "citations": []}
 
         def tokens():
             for event, data in kosh.stream_query(question, collection):
-                if event == "sources":
+                if event == "step":
+                    result["steps"].append(data)
+                    thinking.write(data)
+                elif event == "sources":
                     result["sources"] = data
+                    thinking.update(
+                        label=f"🧠 {len(result['steps'])} steps done, writing the answer (first words take ~40 s on CPU)",
+                        state="complete",
+                        expanded=False,
+                    )
                 elif event == "token":
-                    waiting.empty()
                     yield data
                 elif event == "done":
                     result["citations"] = data["citations"]

@@ -8,6 +8,7 @@ from app.retrieval.search import SearchResult
 
 PROMPT_FILE = Path(__file__).resolve().parents[2] / "prompts" / "answer.md"
 CITATION = re.compile(r"\[(\d+)\]")
+REFUSAL = "I don't know based on the available sources."  # same sentence as in prompts/answer.md
 
 
 class Citation(BaseModel):

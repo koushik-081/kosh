@@ -7,7 +7,8 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.generation.answer import Answer, build_messages, check_citations
+from app.agent.graph import AgentState, research
+from app.generation.answer import REFUSAL, Answer, build_messages, check_citations
 from app.llm import chat, chat_stream
 from app.retrieval.rerank import retrieve
 from app.retrieval.search import SearchResult
@@ -28,6 +29,7 @@ class QueryRequest(BaseModel):
 class QueryResponse(BaseModel):
     answer: Answer
     sources: list[SearchResult]
+    steps: list[str]  # what the agent did, in order
 
 
 @app.get("/health")
@@ -54,18 +56,33 @@ def collections() -> list[dict]:
 
 @app.post("/query", response_model=None)
 def query(req: QueryRequest) -> QueryResponse | StreamingResponse:
-    sources = retrieve(req.question, req.collection, req.k)
-    messages = build_messages(req.question, sources)
-    if not req.stream:
-        return QueryResponse(answer=check_citations(chat(messages), sources), sources=sources)
-    return StreamingResponse(_stream_answer(messages, sources), media_type="text/event-stream")
+    if req.stream:
+        return StreamingResponse(_stream_answer(req), media_type="text/event-stream")
+    state: AgentState = {}
+    for state in research(req.question, req.collection, req.k):
+        pass  # run the agent to the end; we only need the final state
+    sources = state["relevant"]
+    text = chat(build_messages(req.question, sources)) if sources else REFUSAL
+    return QueryResponse(answer=check_citations(text, sources), sources=sources, steps=state["steps"])
 
 
-def _stream_answer(messages: list[dict], sources: list[SearchResult]) -> Iterator[str]:
-    """Server-Sent Events: sources first, then the answer token by token, then the checked citations."""
+def _stream_answer(req: QueryRequest) -> Iterator[str]:
+    """Server-Sent Events: each agent step live, then the sources, the answer token by token, the citations."""
+    state: AgentState = {}
+    shown = 0
+    for state in research(req.question, req.collection, req.k):
+        for step in state["steps"][shown:]:
+            yield _event("step", step)
+        shown = len(state["steps"])
+
+    sources = state["relevant"]
     yield _event("sources", [s.model_dump() for s in sources])
+    if not sources:
+        yield _event("token", REFUSAL)
+        yield _event("done", check_citations(REFUSAL, []).model_dump())
+        return
     text = ""
-    for token in chat_stream(messages):
+    for token in chat_stream(build_messages(req.question, sources)):
         text += token
         yield _event("token", token)
     yield _event("done", check_citations(text, sources).model_dump())
