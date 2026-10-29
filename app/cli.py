@@ -8,6 +8,7 @@ from app.ingest.youtube import load_youtube
 from app.retrieval.rerank import retrieve
 from app.retrieval.search import search
 from app.store import save_chunks
+from app.agent.graph import research
 
 
 def main() -> None:
@@ -44,8 +45,15 @@ def main() -> None:
         added = save_chunks(chunks, on_progress=lambda done, total: print(f"  {done}/{total}", end="\r", flush=True))
         print(f"\n{added} new ones saved")
     elif args.command == "ask":
-        result = answer(args.question, retrieve(args.question, args.collection, args.k))
-        print(result.text)
+        state = {}
+        for state in research(args.question, args.collection, args.k):
+            if state["steps"]:
+                print(state["steps"][-1])
+        if not state["relevant"]:
+            print("\nI don't know based on the available sources.")
+            return
+        result = answer(args.question, state["relevant"])
+        print("\n" + result.text)
         print("\nSources:")
         for c in result.citations:
             print(f"  [{c.number}] {c.section or ''}  {c.link}")
