@@ -9,6 +9,7 @@ from app.retrieval.rerank import retrieve
 from app.retrieval.search import search
 from app.store import save_chunks
 from app.agent.graph import research
+from app.agent.steps import verify
 
 
 def main() -> None:
@@ -59,6 +60,12 @@ def main() -> None:
             print(f"  [{c.number}] {c.section or ''}  {c.link}")
         if result.invalid_citations:
             print(f"  warning: the answer cited sources that don't exist: {result.invalid_citations}")
+            print("\nChecking the answer against the sources...")
+        unsupported = verify(result.text, state["relevant"])
+        for statement in unsupported:
+            print(f"  not supported: {statement}")
+        if not unsupported:
+            print("  every statement is supported")
     else:
         find_chunks = search if args.no_rerank else retrieve
         for i, r in enumerate(find_chunks(args.query, args.collection, args.k), start=1):

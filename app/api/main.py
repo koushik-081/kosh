@@ -13,6 +13,7 @@ from app.llm import chat, chat_stream
 from app.retrieval.rerank import retrieve
 from app.retrieval.search import SearchResult
 from app.store import connect
+from app.agent.steps import verify
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 app = FastAPI(title="Kosh", description="Self-correcting knowledge engine")
@@ -30,6 +31,7 @@ class QueryResponse(BaseModel):
     answer: Answer
     sources: list[SearchResult]
     steps: list[str]  # what the agent did, in order
+    unsupported: list[str]  # parts of the answer the self-check could not find in the sources
 
 
 @app.get("/health")
@@ -63,7 +65,13 @@ def query(req: QueryRequest) -> QueryResponse | StreamingResponse:
         pass  # run the agent to the end; we only need the final state
     sources = state["relevant"]
     text = chat(build_messages(req.question, sources)) if sources else REFUSAL
-    return QueryResponse(answer=check_citations(text, sources), sources=sources, steps=state["steps"])
+    unsupported = verify(text, sources)
+    return QueryResponse(
+        answer=check_citations(text, sources),
+        sources=sources,
+        steps=state["steps"] + [_check_step(unsupported)],
+        unsupported=unsupported,
+    )
 
 
 def _stream_answer(req: QueryRequest) -> Iterator[str]:
@@ -86,6 +94,15 @@ def _stream_answer(req: QueryRequest) -> Iterator[str]:
         text += token
         yield _event("token", token)
     yield _event("done", check_citations(text, sources).model_dump())
+    unsupported = verify(text, sources)
+    yield _event("step", _check_step(unsupported))
+    yield _event("check", unsupported)
+
+
+def _check_step(unsupported: list[str]) -> str:
+    if not unsupported:
+        return "✅ Self-check: everything in the answer was found in the sources"
+    return f"⚠️ Self-check: {len(unsupported)} part(s) of the answer were not found in the sources"
 
 
 def _event(name: str, data) -> str:

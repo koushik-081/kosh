@@ -1,6 +1,7 @@
 import re
-from pathlib import Path
 
+from pathlib import Path
+from app.generation.answer import CITATION, REFUSAL
 from app.config import get_settings
 from app.llm import chat
 from app.retrieval.search import SearchResult
@@ -46,3 +47,42 @@ def rewrite(question: str) -> str:
         fast=True,
     )
     return reply.strip().removeprefix("Query:").strip().strip('"').splitlines()[0]
+
+def verify(answer_text: str, sources: list[SearchResult]) -> list[str]:
+    """Return the statements in the answer that the sources do not support.
+
+    Code blocks are checked line by line against the source text, no LLM needed.
+    Each sentence gets its own YES/NO question to the answer model: the 3b flagged
+    6 of 8 true sentences, the 7b none (but it misses about half of the made-up ones).
+    The sources go first and never change, so Ollama reuses its prompt cache.
+    """
+    if not sources or answer_text.strip().startswith(REFUSAL):
+        return []
+    unsupported = [code for code in CODE_BLOCK.findall(answer_text) if not _code_in_sources(code, sources)]
+    numbered = "\n\n".join(f"[{i}] {s.text}" for i, s in enumerate(sources, start=1))
+    system = (PROMPTS / "verify.md").read_text()
+    for sentence in _sentences(answer_text):
+        reply = chat(
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": f"Sources:\n\n{numbered}\n\nSentence: {sentence}"},
+            ]
+        )
+        if reply.strip().upper().startswith("NO"):
+            unsupported.append(sentence)
+    return unsupported
+
+
+def _sentences(text: str) -> list[str]:
+    """The prose of an answer split into sentences, without code blocks or [n] markers."""
+    prose = CITATION.sub("", CODE_BLOCK.sub("\n", text))
+    sentences = (s.strip(" -*\t") for s in re.split(r"(?<=[.!?])\s+|\n+", prose))
+    return [s for s in sentences if len(s) > 20]
+
+
+def _code_in_sources(code: str, sources: list[SearchResult], share: float = 0.8) -> bool:
+    """True if most lines of the code block appear word for word in the sources."""
+    flat = lambda t: " ".join(t.split())  # ignore indentation and line breaks
+    haystack = flat(" ".join(s.text for s in sources))
+    lines = [flat(line) for line in code.strip("`").splitlines()[1:] if flat(line)]
+    return bool(lines) and sum(line in haystack for line in lines) / len(lines) >= share
