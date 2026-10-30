@@ -48,6 +48,7 @@ def rewrite(question: str) -> str:
     )
     return reply.strip().removeprefix("Query:").strip().strip('"').splitlines()[0]
 
+CODE_BLOCK = re.compile(r"```.*?```", re.DOTALL)
 def verify(answer_text: str, sources: list[SearchResult]) -> list[str]:
     """Return the statements in the answer that the sources do not support.
 
