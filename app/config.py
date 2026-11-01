@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     irrelevant_score: float = -8.0
     max_retries: int = 2
 
+    # Tracing: Phoenix (run it with `uvx arize-phoenix serve`, UI at http://localhost:6006)
+    phoenix_url: str = "http://localhost:6006"
+
     # Database
     database_url: str = "postgresql://kosh:kosh@localhost:5433/kosh"
 

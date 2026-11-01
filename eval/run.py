@@ -16,6 +16,8 @@ from app.agent.steps import CODE_BLOCK, _sentences, verify
 from app.generation.answer import REFUSAL, build_messages, check_citations
 from app.llm import chat
 from app.retrieval.rerank import retrieve
+from app.observability.tracing import setup_tracing
+from app.guardrails.input import check_question
 
 EVAL_DIR = Path(__file__).resolve().parent
 JUDGE = EVAL_DIR.parent / "prompts" / "judge.md"
@@ -41,14 +43,17 @@ def is_correct(question: str, reference: str, text: str) -> bool:
 
 def run_one(item: dict, mode: str, k: int) -> dict:
     start = time.time()
-    sources = find_sources(item["question"], item["collection"], mode, k)
+    blocked = check_question(item["question"]) is not None  # stopped by the guard, before any LLM call
+    sources = [] if blocked else find_sources(item["question"], item["collection"], mode, k)
     text = chat(build_messages(item["question"], sources)) if sources else REFUSAL
-    refused = text.strip().startswith(REFUSAL)
+    refused = blocked or text.strip().startswith(REFUSAL)
     result = check_citations(text, sources)
     unsupported = verify(text, sources)
     return {
         "question": item["question"],
         "should_refuse": item["should_refuse"],
+        "attack": item.get("attack", False),
+        "blocked": blocked,
         "refused": refused,
         "gold_retrieved": item["chunk_id"] in [s.id for s in sources],
         "correct": None if item["should_refuse"] or refused else is_correct(item["question"], item["answer"], text),
@@ -67,6 +72,7 @@ def main() -> None:
     parser.add_argument("-i", "--testset", default=str(EVAL_DIR / "testset.jsonl"))
     parser.add_argument("-k", type=int, default=4)
     args = parser.parse_args()
+    setup_tracing()
 
     out = EVAL_DIR / "results" / f"{args.mode}.jsonl"
     out.parent.mkdir(exist_ok=True)

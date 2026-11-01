@@ -11,6 +11,7 @@ from app.store import save_chunks
 from app.agent.graph import research
 from app.agent.steps import verify
 from app.guardrails.input import check_question
+from app.observability.tracing import setup_tracing
 
 
 def main() -> None:
@@ -34,6 +35,7 @@ def main() -> None:
     ask.add_argument("-k", type=int, default=4, help="how many chunks to give the LLM")
 
     args = parser.parse_args()
+    setup_tracing()
     if args.command == "ingest":
         if "youtube.com/" in args.source or "youtu.be/" in args.source:
             chunks = load_youtube(args.source, args.collection)

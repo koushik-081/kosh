@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from app.agent.graph import AgentState, research
 from app.generation.answer import REFUSAL, Answer, build_messages, check_citations
 from app.llm import chat, chat_stream
+from app.observability.tracing import setup_tracing
 from app.retrieval.rerank import retrieve
 from app.retrieval.search import SearchResult
 from app.store import connect
@@ -19,6 +20,7 @@ from app.guardrails.pii import mask
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 app = FastAPI(title="Kosh", description="Self-correcting knowledge engine")
+setup_tracing()
 app.mount("/files", StaticFiles(directory=DATA_DIR), name="files")  # lets PDF citations open in the browser
 
 

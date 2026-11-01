@@ -10,6 +10,7 @@ INJECTION = re.compile(
     r"|forget (all |everything|your (instructions|rules))"
     r"|(reveal|show|print|repeat|tell me) (me )?(your|the) (system )?(prompt|instructions|rules)"
     r"|system prompt"
+    r"|(hidden|secret) (rules|instructions|prompt)|(rules|instructions|prompt) you (were|have been) given"
     r"|you are now\b|from now on,? you\b|pretend (to be|you are)|act as (an? )?(unrestricted|jailbroken|evil|dan)\b"
     r"|developer mode|jailbreak|\bDAN\b",
     re.IGNORECASE,
