@@ -2,7 +2,7 @@ import re
 from pathlib import Path
 
 from pydantic import BaseModel
-
+from app.guardrails.pii import mask
 from app.llm import chat
 from app.retrieval.search import SearchResult
 
@@ -26,7 +26,7 @@ class Answer(BaseModel):
 def build_messages(question: str, sources: list[SearchResult]) -> list[dict]:
     """System prompt with the rules, user message with numbered sources + the question."""
     numbered = "\n\n".join(
-        f"[{i}] ({s.locator.section or s.locator.uri})\n{s.text}" for i, s in enumerate(sources, start=1)
+         f"[{i}] ({s.locator.section or s.locator.uri})\n{mask(s.text)}" for i, s in enumerate(sources, start=1)
     )
     return [
         {"role": "system", "content": PROMPT_FILE.read_text()},

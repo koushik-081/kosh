@@ -14,6 +14,8 @@ from app.retrieval.rerank import retrieve
 from app.retrieval.search import SearchResult
 from app.store import connect
 from app.agent.steps import verify
+from app.guardrails.input import check_question
+from app.guardrails.pii import mask
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 app = FastAPI(title="Kosh", description="Self-correcting knowledge engine")
@@ -60,6 +62,9 @@ def collections() -> list[dict]:
 def query(req: QueryRequest) -> QueryResponse | StreamingResponse:
     if req.stream:
         return StreamingResponse(_stream_answer(req), media_type="text/event-stream")
+    if blocked := check_question(req.question):
+        text = _blocked_message(blocked)
+        return QueryResponse(answer=check_citations(text, []), sources=[], steps=[f"🛡️ Blocked: {blocked}"], unsupported=[])
     state: AgentState = {}
     for state in research(req.question, req.collection, req.k):
         pass  # run the agent to the end; we only need the final state
@@ -77,6 +82,13 @@ def query(req: QueryRequest) -> QueryResponse | StreamingResponse:
 def _stream_answer(req: QueryRequest) -> Iterator[str]:
     """Server-Sent Events: each agent step live, then the sources, the answer token by token, the citations."""
     state: AgentState = {}
+    if blocked := check_question(req.question):
+        yield _event("step", f"🛡️ Blocked: {blocked}")
+        yield _event("sources", [])
+        yield _event("token", _blocked_message(blocked))
+        yield _event("done", check_citations(_blocked_message(blocked), []).model_dump())
+        yield _event("check", [])
+        return
     shown = 0
     for state in research(req.question, req.collection, req.k):
         for step in state["steps"][shown:]:
@@ -84,7 +96,7 @@ def _stream_answer(req: QueryRequest) -> Iterator[str]:
         shown = len(state["steps"])
 
     sources = state["relevant"]
-    yield _event("sources", [s.model_dump() for s in sources])
+    yield _event("sources", [s.model_dump() | {"text": mask(s.text)} for s in sources])
     if not sources:
         yield _event("token", REFUSAL)
         yield _event("done", check_citations(REFUSAL, []).model_dump())
@@ -98,6 +110,8 @@ def _stream_answer(req: QueryRequest) -> Iterator[str]:
     yield _event("step", _check_step(unsupported))
     yield _event("check", unsupported)
 
+def _blocked_message(reason: str) -> str:
+    return f"Kosh did not answer this, because {reason}. Please ask a question about your sources."
 
 def _check_step(unsupported: list[str]) -> str:
     if not unsupported:

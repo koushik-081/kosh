@@ -10,6 +10,7 @@ from app.retrieval.search import search
 from app.store import save_chunks
 from app.agent.graph import research
 from app.agent.steps import verify
+from app.guardrails.input import check_question
 
 
 def main() -> None:
@@ -46,6 +47,9 @@ def main() -> None:
         added = save_chunks(chunks, on_progress=lambda done, total: print(f"  {done}/{total}", end="\r", flush=True))
         print(f"\n{added} new ones saved")
     elif args.command == "ask":
+        if blocked := check_question(args.question):
+            print(f"Blocked: {blocked}")
+            return
         state = {}
         for state in research(args.question, args.collection, args.k):
             if state["steps"]:
