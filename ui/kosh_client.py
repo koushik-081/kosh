@@ -10,6 +10,26 @@ API_URL = os.getenv("KOSH_API_URL", "http://localhost:8010")
 def collections() -> list[dict]:
     return httpx.get(f"{API_URL}/collections", timeout=10).json()
 
+def chats() -> list[dict]:
+    return httpx.get(f"{API_URL}/chats", timeout=10).json()
+
+
+def chat_messages(chat_id: int) -> list[dict]:
+    return httpx.get(f"{API_URL}/chats/{chat_id}", timeout=10).json()
+
+
+def new_chat(title: str) -> int:
+    return httpx.post(f"{API_URL}/chats", json={"title": title}, timeout=10).json()["id"]
+
+
+def save_message(chat_id: int, role: str, content: str, details: dict | None = None) -> None:
+    payload = {"role": role, "content": content, "details": details or {}}
+    httpx.post(f"{API_URL}/chats/{chat_id}/messages", json=payload, timeout=10).raise_for_status()
+
+
+def delete_chat(chat_id: int) -> None:
+    httpx.delete(f"{API_URL}/chats/{chat_id}", timeout=10).raise_for_status()
+
 
 def stream_query(question: str, collection: str | None, k: int = 4) -> Iterator[tuple[str, object]]:
     """Yield (event, data) pairs from the /query Server-Sent Events stream."""

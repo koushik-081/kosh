@@ -14,12 +14,27 @@ with st.sidebar:
     choice = st.selectbox("Collection", ["All collections"] + [c["name"] for c in available])
     for c in available:
         st.caption(f"**{c['name']}**: {c['documents']} documents, {c['chunks']} chunks")
-    if st.button("Clear chat"):
+    if st.button("➕ New chat", use_container_width=True):
+        st.session_state.chat_id = None
         st.session_state.messages = []
+    st.subheader("Past chats")
+    for chat in kosh.chats():
+        current = chat["id"] == st.session_state.get("chat_id")
+        if st.button(chat["title"], key=f"chat-{chat['id']}", type="primary" if current else "secondary",
+                     use_container_width=True):
+            st.session_state.chat_id = chat["id"]
+            st.session_state.messages = kosh.chat_messages(chat["id"])
+            st.rerun()  # redraw so the chosen chat is highlighted
+    if st.session_state.get("chat_id") and st.button("🗑️ Delete this chat", use_container_width=True):
+        kosh.delete_chat(st.session_state.chat_id)
+        st.session_state.chat_id = None
+        st.session_state.messages = []
+        st.rerun()
 collection = None if choice == "All collections" else choice
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
+    st.session_state.chat_id = None  # None = a new chat, saved when the first question is asked
 
 
 def show_steps(steps: list[str]) -> None:
@@ -53,6 +68,10 @@ for msg in st.session_state.messages:
             show_sources(msg["citations"], msg["sources"])
 
 if question := st.chat_input("Ask a question about your sources..."):
+    first_question = st.session_state.chat_id is None
+    if first_question:
+        st.session_state.chat_id = kosh.new_chat(question)  # the first question becomes the chat's title
+    kosh.save_message(st.session_state.chat_id, "user", question)
     st.session_state.messages.append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.markdown(question)
@@ -87,3 +106,6 @@ if question := st.chat_input("Ask a question about your sources..."):
         show_sources(result["citations"], result["sources"])
 
     st.session_state.messages.append({"role": "assistant", "content": text, **result})
+    kosh.save_message(st.session_state.chat_id, "assistant", text, result)
+    if first_question:
+        st.rerun()  # show the new chat in the sidebar

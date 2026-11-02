@@ -17,6 +17,7 @@ from app.store import connect
 from app.agent.steps import verify
 from app.guardrails.input import check_question
 from app.guardrails.pii import mask
+from app.history import add_message, delete_chat, get_messages, list_chats, new_chat
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 app = FastAPI(title="Kosh", description="Self-correcting knowledge engine")
@@ -37,6 +38,14 @@ class QueryResponse(BaseModel):
     steps: list[str]  # what the agent did, in order
     unsupported: list[str]  # parts of the answer the self-check could not find in the sources
 
+class NewChat(BaseModel):
+    title: str
+
+
+class Message(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+    details: dict = {}  # steps, sources, citations, unsupported
 
 @app.get("/health")
 def health() -> dict:
@@ -59,6 +68,32 @@ def collections() -> list[dict]:
             """
         ).fetchall()
     return [{"name": name, "documents": docs, "chunks": chunks} for name, docs, chunks in rows]
+
+@app.get("/chats")
+def chats() -> list[dict]:
+    return list_chats()
+
+
+@app.post("/chats")
+def create_chat(req: NewChat) -> dict:
+    return {"id": new_chat(req.title)}
+
+
+@app.get("/chats/{chat_id}")
+def chat_messages(chat_id: int) -> list[dict]:
+    return get_messages(chat_id)
+
+
+@app.post("/chats/{chat_id}/messages")
+def save_message(chat_id: int, msg: Message) -> dict:
+    add_message(chat_id, msg.role, msg.content, msg.details)
+    return {"ok": True}
+
+
+@app.delete("/chats/{chat_id}")
+def remove_chat(chat_id: int) -> dict:
+    delete_chat(chat_id)
+    return {"ok": True}
 
 @app.post("/query", response_model=None)
 def query(req: QueryRequest) -> QueryResponse | StreamingResponse:

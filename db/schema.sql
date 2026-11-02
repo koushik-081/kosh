@@ -16,3 +16,19 @@ CREATE TABLE IF NOT EXISTS chunks (
 CREATE INDEX IF NOT EXISTS chunks_embedding_idx ON chunks USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS chunks_tsv_idx ON chunks USING gin (tsv);
 CREATE INDEX IF NOT EXISTS chunks_doc_idx ON chunks (collection, document_id);
+
+-- Saved chats for the dashboard (Day 8a)
+CREATE TABLE IF NOT EXISTS chats (
+    id         BIGSERIAL PRIMARY KEY,
+    title      TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS messages (
+    id         BIGSERIAL PRIMARY KEY,
+    chat_id    BIGINT      NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    role       TEXT        NOT NULL,              -- 'user' or 'assistant'
+    content    TEXT        NOT NULL,
+    details    JSONB       NOT NULL DEFAULT '{}', -- steps, sources, citations, unsupported
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS messages_chat_idx ON messages (chat_id, id);
