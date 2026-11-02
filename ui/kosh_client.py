@@ -10,6 +10,33 @@ API_URL = os.getenv("KOSH_API_URL", "http://localhost:8010")
 def collections() -> list[dict]:
     return httpx.get(f"{API_URL}/collections", timeout=10).json()
 
+def documents(collection: str) -> list[dict]:
+    return httpx.get(f"{API_URL}/documents", params={"collection": collection}, timeout=10).json()
+
+
+def delete_document(collection: str, document_id: str) -> None:
+    params = {"collection": collection, "document_id": document_id}
+    httpx.delete(f"{API_URL}/documents", params=params, timeout=30).raise_for_status()
+
+
+def ingest(source: str, collection: str, path: str = "") -> dict:
+    """Raises httpx.HTTPStatusError with the reason if the source can't be read."""
+    payload = {"source": source, "collection": collection, "path": path}
+    resp = httpx.post(f"{API_URL}/ingest", json=payload, timeout=1800)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def ingest_pdf(collection: str, name: str, data: bytes) -> dict:
+    params = {"collection": collection, "name": name}
+    resp = httpx.post(f"{API_URL}/ingest/pdf", params=params, content=data, timeout=1800)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def quality() -> dict:
+    return httpx.get(f"{API_URL}/quality", timeout=10).json()
+
 def chats() -> list[dict]:
     return httpx.get(f"{API_URL}/chats", timeout=10).json()
 

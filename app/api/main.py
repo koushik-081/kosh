@@ -2,7 +2,8 @@ import json
 from collections.abc import Iterator
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -13,13 +14,15 @@ from app.llm import chat, chat_stream
 from app.observability.tracing import setup_tracing
 from app.retrieval.rerank import retrieve
 from app.retrieval.search import SearchResult
-from app.store import connect
+from app.store import connect, delete_document, list_documents, save_chunks
 from app.agent.steps import verify
 from app.guardrails.input import check_question
 from app.guardrails.pii import mask
+from app.ingest.auto import load_any
 from app.history import add_message, delete_chat, get_messages, list_chats, new_chat
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+EVAL_DIR = DATA_DIR.parent / "eval"
 app = FastAPI(title="Kosh", description="Self-correcting knowledge engine")
 setup_tracing()
 app.mount("/files", StaticFiles(directory=DATA_DIR), name="files")  # lets PDF citations open in the browser
@@ -37,6 +40,11 @@ class QueryResponse(BaseModel):
     sources: list[SearchResult]
     steps: list[str]  # what the agent did, in order
     unsupported: list[str]  # parts of the answer the self-check could not find in the sources
+
+class IngestRequest(BaseModel):
+    source: str  # web page, GitHub repo or YouTube URL
+    collection: str
+    path: str = ""  # GitHub only: just this folder
 
 class NewChat(BaseModel):
     title: str
@@ -68,6 +76,52 @@ def collections() -> list[dict]:
             """
         ).fetchall()
     return [{"name": name, "documents": docs, "chunks": chunks} for name, docs, chunks in rows]
+
+@app.get("/documents")
+def documents(collection: str) -> list[dict]:
+    return list_documents(collection)
+
+
+@app.delete("/documents")
+def remove_document(collection: str, document_id: str) -> dict:
+    return {"removed": delete_document(collection, document_id)}
+
+
+@app.post("/ingest")
+def ingest(req: IngestRequest) -> dict:
+    """Read, chunk, embed and store a URL. Slow on CPU: a big GitHub repo takes minutes."""
+    try:
+        chunks = load_any(req.source, req.collection, req.path)
+    except Exception as e:  # bad URL, no transcript, private repo...
+        raise HTTPException(400, f"Could not read {req.source}: {e}")
+    return {"found": len(chunks), "added": save_chunks(chunks)}
+
+
+@app.post("/ingest/pdf")
+async def ingest_pdf(collection: str, name: str, request: Request) -> dict:
+    """The PDF's bytes are the request body; it is saved under data/uploads so citations can open it."""
+    if not name.lower().endswith(".pdf"):
+        raise HTTPException(400, "Only PDF files can be uploaded")
+    target = Path("data/uploads") / Path(name).name  # relative, like CLI paths, so /files links work
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(await request.body())
+    try:
+        chunks = await run_in_threadpool(load_any, str(target), collection)
+    except Exception as e:
+        raise HTTPException(400, f"Could not read {name}: {e}")
+    return {"found": len(chunks), "added": await run_in_threadpool(save_chunks, chunks)}
+
+
+@app.get("/quality")
+def quality() -> dict:
+    """The latest eval report (eval/report.md) and every question's result from eval/results/."""
+    report = EVAL_DIR / "report.md"
+    questions = [
+        json.loads(line) | {"mode": f.stem}
+        for f in sorted((EVAL_DIR / "results").glob("*.jsonl"))
+        for line in f.open()
+    ]
+    return {"report": report.read_text() if report.exists() else None, "questions": questions}
 
 @app.get("/chats")
 def chats() -> list[dict]:

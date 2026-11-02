@@ -65,3 +65,23 @@ def _skip_existing(conn: psycopg.Connection, batch: list[Chunk]) -> list[Chunk]:
     ).fetchall()
     seen = {r[0] for r in rows}
     return [c for c in batch if c.content_hash not in seen]
+
+def list_documents(collection: str) -> list[dict]:
+    """One row per document in a collection, with its type and number of chunks."""
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT document_id, min(locator->>'source_type'), count(*)
+            FROM chunks WHERE collection = %s GROUP BY document_id ORDER BY document_id
+            """,
+            (collection,),
+        ).fetchall()
+    return [{"document_id": doc, "source_type": kind, "chunks": n} for doc, kind, n in rows]
+
+
+def delete_document(collection: str, document_id: str) -> int:
+    """Remove every chunk of one document. Returns how many were removed."""
+    with connect() as conn:
+        return conn.execute(
+            "DELETE FROM chunks WHERE collection = %s AND document_id = %s", (collection, document_id)
+        ).rowcount

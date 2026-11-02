@@ -1,10 +1,7 @@
 import argparse
 
-from app.ingest.github import load_github
+from app.ingest.auto import load_any
 from app.generation.answer import answer
-from app.ingest.pdf import load_pdf
-from app.ingest.web import load_web
-from app.ingest.youtube import load_youtube
 from app.retrieval.rerank import retrieve
 from app.retrieval.search import search
 from app.store import save_chunks
@@ -37,14 +34,7 @@ def main() -> None:
     args = parser.parse_args()
     setup_tracing()
     if args.command == "ingest":
-        if "youtube.com/" in args.source or "youtu.be/" in args.source:
-            chunks = load_youtube(args.source, args.collection)
-        elif args.source.startswith("https://github.com/"):
-            chunks = load_github(args.source, args.collection, args.path)
-        elif args.source.startswith(("http://", "https://")):
-            chunks = load_web(args.source, args.collection)
-        else:
-            chunks = load_pdf(args.source, args.collection)
+        chunks = load_any(args.source, args.collection, args.path)
         print(f"{len(chunks)} chunks found, embedding...")
         added = save_chunks(chunks, on_progress=lambda done, total: print(f"  {done}/{total}", end="\r", flush=True))
         print(f"\n{added} new ones saved")

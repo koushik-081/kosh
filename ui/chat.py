@@ -14,18 +14,18 @@ with st.sidebar:
     choice = st.selectbox("Collection", ["All collections"] + [c["name"] for c in available])
     for c in available:
         st.caption(f"**{c['name']}**: {c['documents']} documents, {c['chunks']} chunks")
-    if st.button("➕ New chat", use_container_width=True):
+    if st.button("➕ New chat",  width="stretch"):
         st.session_state.chat_id = None
         st.session_state.messages = []
     st.subheader("Past chats")
     for chat in kosh.chats():
         current = chat["id"] == st.session_state.get("chat_id")
         if st.button(chat["title"], key=f"chat-{chat['id']}", type="primary" if current else "secondary",
-                     use_container_width=True):
+                      width="stretch"):
             st.session_state.chat_id = chat["id"]
             st.session_state.messages = kosh.chat_messages(chat["id"])
             st.rerun()  # redraw so the chosen chat is highlighted
-    if st.session_state.get("chat_id") and st.button("🗑️ Delete this chat", use_container_width=True):
+    if st.session_state.get("chat_id") and st.button("🗑️ Delete this chat",  width="stretch"):
         kosh.delete_chat(st.session_state.chat_id)
         st.session_state.chat_id = None
         st.session_state.messages = []
