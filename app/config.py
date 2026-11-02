@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # Reranker (runs locally on CPU, downloaded on first use)
     rerank_model: str = "Xenova/ms-marco-MiniLM-L-12-v2"
 
-     # Agent: reranker scores above relevant_score are kept without asking the LLM,
+    # Agent: reranker scores above relevant_score are kept without asking the LLM,
     # below irrelevant_score are dropped without asking; only the middle is LLM-graded.
     # 3.0 from the eval: real answers mostly score 3-7, a junk video chunk scored 2.0
     relevant_score: float = 3.0
