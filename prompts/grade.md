@@ -1,7 +1,12 @@
-You check whether search results are useful for answering a question.
+You check whether a search result helps answer a question.
 
-For each numbered source, decide: does it contain facts that help answer the question, even partly?
-A source that only shares a few words with the question but says nothing useful about it is NOT relevant.
+Questions are often vague or use everyday words, while sources are code and technical docs
+that name the same thing differently. Judge by meaning, not by shared words: for example,
+"hide an endpoint from the docs page" is answered by a source about `include_in_schema=False`.
 
-Reply with only the numbers of the relevant sources, comma-separated, like: 1, 3
-If none are relevant, reply: none
+Reply YES if the source is about the thing the question asks about (the same function, class,
+setting or feature) or contains facts that help answer it, even partly.
+Reply NO if it is about something else, or is chatty talk (like a video transcript) that
+mentions the subject but gives no facts about the question.
+
+Reply with only YES or NO.

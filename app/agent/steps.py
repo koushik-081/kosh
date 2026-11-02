@@ -13,7 +13,7 @@ def grade(question: str, sources: list[SearchResult]) -> list[SearchResult]:
     """Keep the sources that help answer the question.
 
     The reranker score decides the clear cases for free; only the unclear middle
-    goes to the fast LLM, because every LLM call costs ~15 s on a CPU.
+    goes to the LLM, because every LLM call costs time on a CPU.
     """
     s = get_settings()
     sure = [r for r in sources if r.score >= s.relevant_score]
@@ -22,31 +22,35 @@ def grade(question: str, sources: list[SearchResult]) -> list[SearchResult]:
 
 
 def _llm_grade(question: str, sources: list[SearchResult]) -> list[SearchResult]:
-    """Ask the fast model which sources actually help answer the question; return only those."""
-    if not sources:
-        return []
-    numbered = "\n\n".join(f"[{i}] {s.text[:800]}" for i, s in enumerate(sources, start=1))
-    reply = chat(
-        [
-            {"role": "system", "content": (PROMPTS / "grade.md").read_text()},
-            {"role": "user", "content": f"Question: {question}\n\nSources:\n\n{numbered}"},
-        ],
-        fast=True,
-    )
-    keep = {int(n) for n in re.findall(r"\d+", reply)}
-    return [s for i, s in enumerate(sources, start=1) if i in keep]
+    """Ask the answer model about each source on its own: does it help answer the question?
+
+    One YES/NO per source with the whole chunk: the 3b judging a numbered list (and only
+    the first 800 characters) dropped the right chunk on every vague test question.
+    """
+    system = (PROMPTS / "grade.md").read_text()
+    kept = []
+    for source in sources:
+        reply = chat([
+            {"role": "system", "content": system},
+            {"role": "user", "content": f"Question: {question}\n\nSource:\n{source.text}"},
+        ])
+        if reply.strip().upper().startswith("YES"):
+            kept.append(source)
+    return kept
 
 
-def rewrite(question: str) -> str:
-    """Ask the fast model for a better search query when the first search found nothing useful."""
-    reply = chat(
-        [
-            {"role": "system", "content": (PROMPTS / "rewrite.md").read_text()},
-            {"role": "user", "content": f"Question: {question}\nQuery:"},
-        ],
-        fast=True,
-    )
-    return reply.strip().removeprefix("Query:").strip().strip('"').splitlines()[0]
+def rewrite(question: str, tried: list[str]) -> str:
+    """Ask the answer model for a new search query, different from the ones that already failed.
+
+    Always rewrites the user's question, not the last query: rewriting a rewrite drifted
+    into hyphenated keyword salad that the full-text search could not match.
+    """
+    reply = chat([
+        {"role": "system", "content": (PROMPTS / "rewrite.md").read_text()},
+        {"role": "user", "content": f"Question: {question}\nAlready tried: {'; '.join(tried)}\nQuery:"},
+    ])
+    query = reply.strip().removeprefix("Query:").strip().strip('"').splitlines()[0]
+    return re.sub(r"(?<=\w)-(?=\w)", " ", query)  # "app-version-docs" -> "app version docs"
 
 CODE_BLOCK = re.compile(r"```.*?```", re.DOTALL)
 def verify(answer_text: str, sources: list[SearchResult]) -> list[str]:

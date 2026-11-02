@@ -16,6 +16,8 @@ class AgentState(TypedDict, total=False):
     k: int
     query: str  # what we search for (changes when rewritten)
     attempts: int  # how many rewrites so far
+    tried: Annotated[list[str], operator.add]  # every query searched so far
+    graded: Annotated[list[int], operator.add]  # ids of chunks already graded, never graded twice
     sources: list[SearchResult]  # latest search results
     relevant: list[SearchResult]  # everything that passed grading so far, best first
     steps: Annotated[list[str], operator.add]  # human-readable trace; each node appends to it
@@ -23,23 +25,26 @@ class AgentState(TypedDict, total=False):
 
 def search_node(state: AgentState) -> dict:
     sources = retrieve(state["query"], state["collection"], state["k"])
-    return {"sources": sources, "steps": [f"🔎 Searched \"{state['query']}\": {len(sources)} chunks"]}
+    return {"sources": sources, "tried": [state["query"]],
+            "steps": [f"🔎 Searched \"{state['query']}\": {len(sources)} chunks"]}
 
 
 def grade_node(state: AgentState) -> dict:
-    kept = grade(state["question"], state["sources"])
+    new = [r for r in state["sources"] if r.id not in state["graded"]]
+    kept = grade(state["question"], new)
     # keep what earlier attempts found too, without duplicates, best reranker score first
     merged = {r.id: r for r in state.get("relevant", []) + kept}
     relevant = sorted(merged.values(), key=lambda r: r.score, reverse=True)[: state["k"]]
     sure = sum(r.score >= get_settings().relevant_score for r in kept)
     return {
         "relevant": relevant,
-        "steps": [f"⚖️ Graded: kept {len(kept)} of {len(state['sources'])} ({sure} clearly relevant)"],
+        "graded": [r.id for r in new],
+        "steps": [f"⚖️ Graded {len(new)} new chunks: kept {len(kept)} ({sure} clearly relevant)"],
     }
 
 
 def rewrite_node(state: AgentState) -> dict:
-    query = rewrite(state["query"])
+    query = rewrite(state["question"], state["tried"])
     return {"query": query, "attempts": state["attempts"] + 1, "steps": [f"✏️ Rewrote the query to \"{query}\""]}
 
 
@@ -50,16 +55,14 @@ def refuse_node(state: AgentState) -> dict:
 def after_grading(state: AgentState) -> str:
     """The decision point: answer, try again with a better query, or give up honestly.
 
-    Answer straight away only if a source is clearly relevant. If we only have
-    "maybe" sources, first try a better query; when out of retries, answer from
-    the best we found, or refuse if we found nothing at all.
+    Answer as soon as anything passed grading (the reranker was sure, or the LLM said YES).
+    Otherwise try a better query; when out of retries, refuse instead of guessing.
     """
-    s = get_settings()
-    if any(r.score >= s.relevant_score for r in state["relevant"]):
+    if state["relevant"]:
         return "answer"
-    if state["attempts"] < s.max_retries:
+    if state["attempts"] < get_settings().max_retries:
         return "rewrite"
-    return "answer" if state["relevant"] else "refuse"
+    return "refuse"
 
 
 def _build():
@@ -85,5 +88,5 @@ def research(question: str, collection: str | None = None, k: int = 4) -> Iterat
     The last state yielded holds `relevant`: the sources to answer from (empty = refuse).
     """
     start: AgentState = {"question": question, "collection": collection, "k": k,
-                         "query": question, "attempts": 0, "steps": []}
+                         "query": question, "attempts": 0, "tried": [], "graded": [], "steps": []}
     yield from GRAPH.stream(start, stream_mode="values")

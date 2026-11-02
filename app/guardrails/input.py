@@ -12,6 +12,8 @@ INJECTION = re.compile(
     r"|system prompt"
     r"|(hidden|secret) (rules|instructions|prompt)|(rules|instructions|prompt) you (were|have been) given"
     r"|you are now\b|from now on,? you\b|pretend (to be|you are)|act as (an? )?(unrestricted|jailbroken|evil|dan)\b"
+    r"|(respond|reply|answer|speak|talk) only in (pirate|emoji|riddles|rhyme)|from here on\b"
+    r"|(skip|drop|omit|remove|leave out|without|no more) (the |any |your )?citations\b"
     r"|developer mode|jailbreak|\bDAN\b",
     re.IGNORECASE,
 )
