@@ -1,7 +1,7 @@
 [project]
 name = "kosh"
 version = "0.1.0"
-description = "Add your description here"
+description = "Self-correcting RAG over PDFs, web pages, GitHub repos and YouTube, with deep-link citations, running on local models"
 authors = [
     { name = "Koushik Saraswathula", email = "Koushik.Saraswathula@gmail.com" }
 ]

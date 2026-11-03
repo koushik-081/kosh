@@ -65,6 +65,7 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
         if msg["role"] == "assistant":
             show_steps(msg["steps"])
+            show_unsupported(msg.get("unsupported", []))
             show_sources(msg["citations"], msg["sources"])
 
 if question := st.chat_input("Ask a question about your sources..."):
